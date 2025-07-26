@@ -5,8 +5,7 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     FLASK_APP=app.py \
-    FLASK_ENV=production \
-    PORT=5000
+    FLASK_ENV=production
 
 # Set work directory
 WORKDIR /app
@@ -29,6 +28,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Copy application code
 COPY . .
 
+# Ensure client_secret.json is copied (make sure it's not in .dockerignore)
+
 # Create uploads directory
 RUN mkdir -p uploads
 
@@ -39,12 +40,10 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser \
 # Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 5000
+# Expose port 8080 (Cloud Run default)
+EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/test-config || exit 1
+# Remove health check for Cloud Run (it has its own health checks)
 
 # Run the application
-CMD ["python", "app.py"] 
+CMD ["python", "app.py"]

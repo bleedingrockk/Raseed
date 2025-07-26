@@ -1,6 +1,7 @@
 from flask import Flask, render_template, url_for, session, redirect, request, jsonify
 import google_auth_oauthlib.flow
 import google.auth.transport.requests
+import google.oauth2.credentials
 import requests as http_requests
 from datetime import datetime
 import json
@@ -10,28 +11,58 @@ from modules.image_handler import ImageHandler
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
+# Session configuration for better reliability
+app.config.update(
+    SESSION_COOKIE_SECURE=False,  # Set to True in production with HTTPS
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=1800  # 30 minutes
+)
+
 # OAuth 2 scopes
 SCOPES = ['https://www.googleapis.com/auth/userinfo.email',
           'https://www.googleapis.com/auth/userinfo.profile',
           'openid']
 
-def load_client_secrets():
-    """Load client secrets from JSON file"""
-    try:
-        with open('client_secret.json', 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print("❌ client_secret.json file not found!")
-        print("Please download the OAuth 2.0 credentials JSON from Google Cloud Console")
-        return None
-    except json.JSONDecodeError:
-        print("❌ Invalid JSON format in client_secret.json")
-        return None
+# Load credentials - Updated with correct redirect URIs
+CLIENT_SECRETS = {
+    "web": {
+        "client_id": "1011657499203-867g0oicr297kdrnqt7d29268708d4fb.apps.googleusercontent.com",
+        "project_id": "graphite-record-467002-g2",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_secret": "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",
+        "redirect_uris": [
+            "https://agent-raseed-flask-app-1011657499203.asia-south1.run.app/auth/google",
+            "https://agent-raseed-flask-app-1011657499203.asia-south1.run.app/auth/google/",
+            "https://agent-raseed-flask-app-1011657499203.asia-south1.run.app/auth",
+            "https://agent-raseed-flask-app-1011657499203.asia-south1.run.app/auth/",
+            "http://agent-raseed-flask-app-1011657499203.asia-south1.run.app/auth/google",
+            "http://agent-raseed-flask-app-1011657499203.asia-south1.run.app/auth/google/",
+            "http://agent-raseed-flask-app-1011657499203.asia-south1.run.app/auth",
+            "http://agent-raseed-flask-app-1011657499203.asia-south1.run.app/auth/",
+            "http://localhost:8080/auth/google",
+            "http://127.0.0.1:8080/auth/google"
+        ],
+        "javascript_origins": [
+            "https://agent-raseed-flask-app-1011657499203.asia-south1.run.app",
+            "http://agent-raseed-flask-app-1011657499203.asia-south1.run.app",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080"
+        ]
+    }
+}
 
-# Load client secrets
-CLIENT_SECRETS = load_client_secrets()
-if not CLIENT_SECRETS:
-    exit(1)
+# Only exit if we're in a production environment and have no credentials
+if CLIENT_SECRETS is None:
+    if os.environ.get('FLASK_ENV') != 'development':
+        print("❌ No OAuth credentials found in production environment!")
+        print("Please set the GOOGLE_CLIENT_SECRETS environment variable")
+        # Don't exit immediately - let the app start but warn about missing credentials
+    else:
+        print("⚠️ Running in development mode without credentials")
+
 
 def create_flow():
     """Create a Google OAuth flow"""
@@ -53,43 +84,85 @@ def index():
 @app.route('/login')
 def login():
     """Initiate the OAuth flow"""
-    flow = create_flow()
-    
-    authorization_url, state = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true'
-    )
-    
-    session['state'] = state
-    
-    return redirect(authorization_url)
+    try:
+        # Clear any existing session data
+        session.pop('state', None)
+        session.pop('user', None)
+        session.pop('credentials', None)
+        
+        flow = create_flow()
+        
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true'
+        )
+        
+        # Store state in session and make session permanent
+        session['state'] = state
+        session.permanent = True
+        
+        print(f"DEBUG: Generated state: {state}")
+        print(f"DEBUG: Authorization URL: {authorization_url}")
+        print(f"DEBUG: Session before redirect: {dict(session)}")
+        
+        return redirect(authorization_url)
+    except Exception as e:
+        print(f"Error in login route: {e}")
+        return f"Login error: {str(e)}", 500
 
-@app.route('/auth')
+@app.route('/auth/google')
 def oauth_callback():
     """Handle the OAuth callback"""
     try:
-        state = session.get('state')
-        if not state:
-            print("ERROR: State not found in session during OAuth callback.")
-            return redirect(url_for('index'))
+        print(f"DEBUG: Received callback request: {request.url}")
+        print(f"DEBUG: Session contents: {dict(session)}")
+        print(f"DEBUG: Request args: {dict(request.args)}")
+        
+        # Check if there's an error in the callback
+        if 'error' in request.args:
+            error = request.args.get('error')
+            error_description = request.args.get('error_description', '')
+            print(f"OAuth error: {error} - {error_description}")
+            return f"Authentication failed: {error} - {error_description}", 400
+        
+        # Get state from session
+        stored_state = session.get('state')
+        received_state = request.args.get('state')
+        
+        print(f"DEBUG: Stored state: {stored_state}")
+        print(f"DEBUG: Received state: {received_state}")
+        
+        if not stored_state:
+            print("ERROR: No state found in session during OAuth callback.")
+            # Try to redirect back to login to restart the flow
+            return redirect(url_for('login'))
+        
+        if stored_state != received_state:
+            print(f"ERROR: State mismatch. Stored: {stored_state}, Received: {received_state}")
+            return "Authentication failed: State parameter mismatch.", 400
         
         flow = google_auth_oauthlib.flow.Flow.from_client_config(
             CLIENT_SECRETS,
             scopes=SCOPES,
-            state=state
+            state=stored_state
         )
         flow.redirect_uri = url_for('oauth_callback', _external=True)
         
         authorization_response = request.url
+        print(f"DEBUG: Authorization response URL: {authorization_response}")
+        
         flow.fetch_token(authorization_response=authorization_response)
         
         credentials = flow.credentials
         
+        # Get user info from Google
         user_info_url = 'https://www.googleapis.com/oauth2/v2/userinfo'
         headers = {'Authorization': f'Bearer {credentials.token}'}
         
         response = http_requests.get(user_info_url, headers=headers)
         user_info = response.json()
+        
+        print(f"DEBUG: User info response: {user_info}")
         
         if response.status_code == 200 and user_info.get('verified_email', False):
             session['user'] = {
@@ -110,6 +183,11 @@ def oauth_callback():
                 'scopes': credentials.scopes
             }
             
+            print(f"✅ User successfully authenticated: {user_info['email']}")
+            
+            # Clear the state after successful authentication
+            session.pop('state', None)
+            
             # Redirect to the chatbot page after successful login
             return redirect(url_for('chatbot_page'))
         else:
@@ -118,7 +196,9 @@ def oauth_callback():
             
     except Exception as e:
         print(f"OAuth callback error: {e}")
-        return redirect(url_for('index'))
+        import traceback
+        traceback.print_exc()
+        return f"Authentication failed: {str(e)}", 500
 
 @app.route('/chatbot')
 def chatbot_page():
@@ -143,14 +223,17 @@ def account():
 
 @app.route('/logout')
 def logout():
+    """Logout and clear session"""
     # Clear the session
     session.pop('user', None)
     session.pop('credentials', None)
     session.pop('state', None)
+    print("✅ User logged out successfully")
     return redirect(url_for('index'))
 
 @app.route('/api/user')
 def api_user():
+    """Get current user info"""
     if 'user' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     return jsonify(session['user'])
@@ -166,14 +249,16 @@ def refresh_token():
             **session['credentials']
         )
         
-        request = google.auth.transport.requests.Request()
-        credentials.refresh(request)
+        request_obj = google.auth.transport.requests.Request()
+        credentials.refresh(request_obj)
         
         session['credentials']['token'] = credentials.token
         
         return jsonify({'message': 'Token refreshed successfully'})
     except Exception as e:
+        print(f"Token refresh error: {e}")
         return jsonify({'error': f'Token refresh failed: {str(e)}'}), 500
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     """Endpoint to handle chatbot requests and interact with Gemini API."""
@@ -190,13 +275,11 @@ def chat():
         result = graph.invoke({"messages": [user_message]})
 
         if result.get("messages"):
-                last_message = result["messages"][-1]
-                if hasattr(last_message, 'content'):
-                    bot_response = last_message.content
-                    print(f"🤖 Assistant: {last_message.content}")
-
-                    return jsonify({'reply': bot_response})  
-
+            last_message = result["messages"][-1]
+            if hasattr(last_message, 'content'):
+                bot_response = last_message.content
+                print(f"🤖 Assistant: {last_message.content}")
+                return jsonify({'reply': bot_response})  
         else:
             print(f"Unexpected Gemini API response structure: {result}")
             return jsonify({'error': 'Could not get a valid response from the chatbot model.'}), 500
@@ -253,6 +336,17 @@ def upload_image():
         print(f"❌ Error in upload_image: {e}")
         return jsonify({'success': False, 'error': f'Upload failed: {str(e)}'}), 500
 
+# Add route to manually test session
+@app.route('/debug-session')
+def debug_session():
+    """Debug endpoint to check session contents"""
+    return jsonify({
+        'session_contents': dict(session),
+        'has_state': 'state' in session,
+        'state_value': session.get('state'),
+        'session_id': request.cookies.get('session')
+    })
+
 @app.route('/test-config')
 def test_config():
     """Test endpoint to verify configuration"""
@@ -262,22 +356,38 @@ def test_config():
             'status': 'success',
             'client_id': client_info.get('client_id', '')[:20] + '...',
             'redirect_uris': client_info.get('redirect_uris', []),
-            'scopes': SCOPES
+            'scopes': SCOPES,
+            'current_redirect_uri': url_for('oauth_callback', _external=True)
         })
     else:
         return jsonify({'status': 'error', 'message': 'No client secrets loaded'})
 
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    return "Page not found", 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return "Internal server error", 500
+
 if __name__ == '__main__':
+    # Cloud Run provides the PORT environment variable
+    port = int(os.environ.get('PORT', 8080))  
+    host = '0.0.0.0'
+
+    # Allow insecure transport for local development
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
-    
-    print("🚀 Starting Flask Google Auth App with Google Auth Libraries...")
-    print(f"📁 Looking for client_secret.json in: {os.getcwd()}")
+
+    print(f"🚀 Starting Flask app on {host}:{port}")
     
     if CLIENT_SECRETS:
         client_info = CLIENT_SECRETS.get('web', {})
         print(f"✅ Google OAuth credentials loaded successfully")
         print(f"🔑 Client ID: {client_info.get('client_id', '')[:20]}...")
         print(f"🔄 Redirect URIs: {client_info.get('redirect_uris', [])}")
-        print(f"🔐 Scopes: {SCOPES}")
-    
-    app.run(debug=True, port=5000)
+    else:
+        print("⚠️ CLIENT_SECRETS not found - OAuth may not work")
+
+    # Remove debug=True for production
+    app.run(host=host, port=port, debug=False)

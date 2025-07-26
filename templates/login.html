@@ -1,27 +1,40 @@
-{% extends "base.html" %}
-
-{% block title %}Login - Flask Google Auth{% endblock %}
-
-{% block content %}
-<div class="min-h-screen flex items-center justify-center">
-    <div class="max-w-md w-full space-y-8">
-        <div class="text-center">
-            <h2 class="mt-6 text-3xl font-extrabold text-gray-900">
-                Welcome to Flask App
-            </h2>
-            <p class="mt-2 text-sm text-gray-600">
-                Please sign in with your Google account
-            </p>
-        </div>
-        <div class="mt-8 space-y-6">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Project Raseed</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for Google icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: "Inter", sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="max-w-md w-full space-y-8 py-10 px-8 bg-white rounded-lg shadow-2xl transition-shadow duration-300">
             <div class="text-center">
-                <a href="{{ url_for('login') }}" 
-                   class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out">
-                    <i class="fab fa-google mr-2"></i>
-                    Sign in with Google
-                </a>
+                <h2 class="mt-6 text-3xl font-extrabold text-gray-900">
+                    Welcome to Project Raseed
+                </h2>
+                <p class="mt-2 text-sm text-gray-600">
+                    Please sign in with your Google account
+                </p>
+            </div>
+            <div class="mt-8 space-y-6">
+                <div class="text-center">
+                    <a href="/auth/google" 
+                       class="group relative w-full flex items-center justify-between py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out rounded-lg">
+                        <span class="ml-2">Sign in with Google</span>
+                        <i class="fab fa-google text-white text-lg"></i>
+                    </a>
+                </div>
             </div>
         </div>
     </div>
-</div>
-{% endblock %}
+</body>
+</html>
