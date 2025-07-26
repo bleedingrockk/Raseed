@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  flask-app:
+    build: .
+    container_name: flask-google-auth-app
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - OAUTHLIB_INSECURE_TRANSPORT=1
+      - SECRET_KEY=your-secret-key-change-in-production
+    volumes:
+      - ./uploads:/app/uploads
+      - ./client_secret.json:/app/client_secret.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/test-config"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a database service if needed in the future
+  # db:
+  #   image: postgres:13
+  #   environment:
+  #     POSTGRES_DB: flask_app
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: password
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+
+# volumes:
+#   postgres_data: 

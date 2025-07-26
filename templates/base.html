@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Flask Google Auth{% endblock %}</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="flex h-screen bg-gray-100">
+        {% block sidebar %}
+        <!-- Sidebar -->
+        <div class="bg-white w-64 min-h-screen shadow-lg flex flex-col relative">
+            <div class="p-4 border-b">
+                <div class="flex items-center space-x-3">
+                    <img src="{{ user.picture }}" alt="Profile" class="w-10 h-10 rounded-full">
+                    <div class="truncate max-w-[120px]">
+                        <h3 class="font-semibold text-gray-800 truncate">{{ user.name }}</h3>
+                        <p class="text-sm text-gray-500 truncate">{{ user.email }}</p>
+                    </div>
+                </div>
+            </div>
+            <nav class="mt-4 flex-1">
+                <a href="{{ url_for('dashboard') }}" 
+                   class="flex items-center px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-700 {% if active_page == 'dashboard' %}bg-blue-50 text-blue-700 border-r-2 border-blue-700{% endif %}">
+                    <i class="fas fa-tachometer-alt mr-3"></i>
+                    Dashboard
+                </a>
+                <a href="{{ url_for('account') }}" 
+                   class="flex items-center px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-700 {% if active_page == 'account' %}bg-blue-50 text-blue-700 border-r-2 border-blue-700{% endif %}">
+                    <i class="fas fa-user mr-3"></i>
+                    Account
+                </a>
+                <a href="{{ url_for('chatbot_page') }}" 
+                   class="flex items-center px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-700 {% if active_page == 'chatbot' %}bg-blue-50 text-blue-700 border-r-2 border-blue-700{% endif %}">
+                    <i class="fas fa-comments mr-3"></i>
+                    Chatbot
+                </a>
+            </nav>
+            <div class="p-4 mt-auto space-y-2">
+                <!-- Upload Button -->
+                <div class="relative">
+                    <input type="file" id="image-upload" accept="image/*" class="hidden" onchange="handleImageUpload(this)">
+                    <button onclick="document.getElementById('image-upload').click()" 
+                            class="flex items-center px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-md w-full">
+                        <i class="fas fa-upload mr-3"></i>
+                        Upload Image
+                    </button>
+                </div>
+                <!-- Logout Button -->
+                <a href="{{ url_for('logout') }}" 
+                   class="flex items-center px-4 py-2 text-red-600 hover:bg-red-50 rounded-md w-full">
+                    <i class="fas fa-sign-out-alt mr-3"></i>
+                    Logout
+                </a>
+            </div>
+        </div>
+        {% endblock %}
+        <div class="flex-1 overflow-y-auto">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.10.2/cdn.js" defer></script>
+    <script>
+        function handleImageUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            // Show loading state
+            const button = input.parentElement.querySelector('button');
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin mr-3"></i>Uploading...';
+            button.disabled = true;
+            
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            fetch('/api/upload-image', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    showNotification('Image uploaded successfully!', 'success');
+                    console.log('Image converted to base64:', data.base64_data.substring(0, 100) + '...');
+                } else {
+                    showNotification('Upload failed: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                showNotification('Upload failed. Please try again.', 'error');
+            })
+            .finally(() => {
+                // Reset button state
+                button.innerHTML = originalText;
+                button.disabled = false;
+                input.value = ''; // Clear the input
+            });
+        }
+        
+        function showNotification(message, type) {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-4 rounded-md shadow-lg z-50 ${
+                type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+            }`;
+            notification.textContent = message;
+            
+            // Add to page
+            document.body.appendChild(notification);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

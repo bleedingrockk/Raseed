@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Chatbot - Flask Google Auth{% endblock %}
+
+{% block content %}
+    <div class="flex-1 p-6">
+        <div class="max-w-5xl mx-auto h-full flex flex-col bg-white rounded-xl shadow-lg border border-gray-100">
+            <!-- Header -->
+            <div class="p-6 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-xl">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">AI Chatbot Assistant</h2>
+                        <p class="text-sm text-gray-600">Ask anything, get instant intelligent responses</p>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center space-x-2">
+                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                    <span class="text-xs text-gray-500">Online and ready to help</span>
+                </div>
+            </div>
+
+            <!-- Chat Messages Area -->
+            <div class="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50/30" id="chat-window">
+                <!-- Welcome Message -->
+                <div class="text-left">
+                    <div class="inline-block bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-2xl rounded-bl-md shadow-sm max-w-xs">
+                        <p class="text-sm">👋 Hello! I'm your AI assistant. How can I help you today?</p>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-1 ml-2">Just now</p>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-6 border-t border-gray-100 bg-white rounded-b-xl">
+                <form id="chat-form" class="flex items-end space-x-3">
+                    <div class="flex-1 relative">
+                        <input 
+                            type="text" 
+                            name="message" 
+                            id="message-input" 
+                            placeholder="Type your message here..." 
+                            class="w-full border border-gray-200 rounded-2xl px-6 py-4 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm transition-all duration-200 hover:shadow-md"
+                            maxlength="500"
+                        >
+                        <div class="absolute right-3 bottom-4 text-xs text-gray-400">
+                            <span id="char-count">0</span>/500
+                        </div>
+                    </div>
+                    <button 
+                        type="submit" 
+                        id="send-button"
+                        class="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-2xl hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                        </svg>
+                    </button>
+                </form>
+                <p class="text-xs text-gray-400 mt-2 text-center">Press Enter to send • Shift+Enter for new line</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const chatForm = document.getElementById('chat-form');
+        const messageInput = document.getElementById('message-input');
+        const chatWindow = document.getElementById('chat-window');
+        const sendButton = document.getElementById('send-button');
+        const charCount = document.getElementById('char-count');
+
+        // Character counter
+        messageInput.addEventListener('input', function() {
+            charCount.textContent = this.value.length;
+        });
+
+        // Auto-resize and Enter key handling
+        messageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                chatForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // Loading state management
+        function setLoading(isLoading) {
+            sendButton.disabled = isLoading;
+            sendButton.innerHTML = isLoading ? 
+                '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>' :
+                '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>';
+        }
+
+        // Create message element
+        function createMessage(content, isUser = false, isError = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = isUser ? 'text-right' : 'text-left';
+            
+            const now = new Date();
+            const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            let bgClass, textClass, borderRadius;
+            if (isError) {
+                bgClass = 'bg-red-50 border border-red-200';
+                textClass = 'text-red-800';
+                borderRadius = 'rounded-2xl rounded-bl-md';
+            } else if (isUser) {
+                bgClass = 'bg-gradient-to-r from-gray-600 to-gray-700';
+                textClass = 'text-white';
+                borderRadius = 'rounded-2xl rounded-br-md';
+            } else {
+                bgClass = 'bg-gradient-to-r from-blue-500 to-blue-600';
+                textClass = 'text-white';
+                borderRadius = 'rounded-2xl rounded-bl-md';
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="inline-block ${bgClass} ${textClass} px-6 py-3 ${borderRadius} shadow-sm max-w-md">
+                    <p class="text-sm whitespace-pre-wrap">${content}</p>
+                </div>
+                <p class="text-xs text-gray-400 mt-1 ${isUser ? 'mr-2' : 'ml-2'}">${timeString}</p>
+            `;
+            
+            return messageDiv;
+        }
+
+        // Form submission
+        chatForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            // Add user message
+            const userMessage = createMessage(message, true);
+            chatWindow.appendChild(userMessage);
+            
+            // Clear input and show loading
+            messageInput.value = '';
+            charCount.textContent = '0';
+            setLoading(true);
+            
+            // Add typing indicator
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'text-left';
+            typingDiv.id = 'typing-indicator';
+            typingDiv.innerHTML = `
+                <div class="inline-block bg-gray-100 px-6 py-3 rounded-2xl rounded-bl-md shadow-sm">
+                    <div class="flex space-x-1">
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    </div>
+                </div>
+            `;
+            chatWindow.appendChild(typingDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                // Remove typing indicator
+                document.getElementById('typing-indicator')?.remove();
+                
+                if (!response.ok) {
+                    throw new Error(`${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                const botMessage = createMessage(data.reply);
+                chatWindow.appendChild(botMessage);
+                
+            } catch (error) {
+                // Remove typing indicator
+                document.getElementById('typing-indicator')?.remove();
+                
+                const errorMessage = createMessage(
+                    'Sorry, I encountered an error. Please try again.', 
+                    false, 
+                    true
+                );
+                chatWindow.appendChild(errorMessage);
+                console.error('Chat error:', error);
+            } finally {
+                setLoading(false);
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+                messageInput.focus();
+            }
+        });
+
+        // Focus input on load
+        messageInput.focus();
+    });
+    </script>
+{% endblock %}
