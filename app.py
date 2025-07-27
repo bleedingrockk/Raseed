@@ -6,7 +6,7 @@ import requests as http_requests
 from datetime import datetime
 import json
 import os
-from modules.image_handler import ImageHandler
+from modules.image_handler import SimpleImageHandler
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
@@ -293,12 +293,11 @@ def chat():
 
 @app.route('/api/upload-image', methods=['POST'])
 def upload_image():
-    """Handle image upload and convert to base64"""
+    """Handle image upload and return GCS URL as confirmation"""
     if 'user' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
-        # Check if image file is present
         if 'image' not in request.files:
             return jsonify({'success': False, 'error': 'No image file provided'}), 400
         
@@ -306,36 +305,33 @@ def upload_image():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'}), 400
         
-        # Save the image using ImageHandler
-        file_path = ImageHandler.save_image(file)
-        if not file_path:
-            return jsonify({'success': False, 'error': 'Invalid file type or upload failed'}), 400
+        # Call SimpleImageHandler to upload the image to GCS
+        result = SimpleImageHandler.upload_image(file)
         
-        # Get image info including base64 data
-        image_info = ImageHandler.get_image_info(file_path)
-        if not image_info:
-            return jsonify({'success': False, 'error': 'Failed to process image'}), 500
-        
-        # Print base64 data to console (for debugging)
-        print(f"📸 Image uploaded successfully!")
-        print(f"📁 File: {image_info['filename']}")
-        print(f"📏 Size: {image_info['file_size']} bytes")
-        print(f"🔗 Extension: {image_info['file_extension']}")
-        print(f"🔢 Base64 (first 100 chars): {image_info['base64_data'][:100]}...")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Image uploaded and converted to base64 successfully',
-            'filename': image_info['filename'],
-            'file_size': image_info['file_size'],
-            'file_extension': image_info['file_extension'],
-            'base64_data': image_info['base64_data']
-        })
+        if result['success']:
+            print(f"📸 Image uploaded successfully to GCS! URL: {result['url']}")
+            return jsonify({
+                'success': True,
+                'message': result['message'],
+                'gcs_url': result['url']
+            })
+        else:
+            print(f"❌ Image upload to GCS failed: {result['message']}")
+            return jsonify({
+                'success': False, 
+                'error': result['message']
+            }), 500
         
     except Exception as e:
-        print(f"❌ Error in upload_image: {e}")
-        return jsonify({'success': False, 'error': f'Upload failed: {str(e)}'}), 500
-
+        import traceback
+        print(f"❌ Critical error in upload_image route: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            'success': False, 
+            'error': f'An unexpected server error occurred: {str(e)}'
+        }), 500
+        
+          
 # Add route to manually test session
 @app.route('/debug-session')
 def debug_session():

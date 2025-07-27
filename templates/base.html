@@ -82,12 +82,20 @@
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Server response:', data); // Debug log
+                
                 if (data.success) {
                     // Show success message
-                    showNotification('Image uploaded successfully!', 'success');
-                    console.log('Image converted to base64:', data.base64_data.substring(0, 100) + '...');
+                    showNotification(data.message || 'Image uploaded successfully!', 'success');
+                    console.log('Image uploaded to GCS URL:', data.gcs_url);
+                    
+                    // You can store the URL or use it as needed
+                    // For example, save to localStorage or send to another endpoint
+                    if (data.gcs_url) {
+                        localStorage.setItem('lastUploadedImageUrl', data.gcs_url);
+                    }
                 } else {
-                    showNotification('Upload failed: ' + data.error, 'error');
+                    showNotification('Upload failed: ' + (data.error || 'Unknown error'), 'error');
                 }
             })
             .catch(error => {
@@ -105,18 +113,30 @@
         function showNotification(message, type) {
             // Create notification element
             const notification = document.createElement('div');
-            notification.className = `fixed top-4 right-4 p-4 rounded-md shadow-lg z-50 ${
+            notification.className = `fixed top-4 right-4 p-4 rounded-md shadow-lg z-50 max-w-md ${
                 type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
             }`;
-            notification.textContent = message;
+            notification.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} mr-2"></i>
+                    <span>${message}</span>
+                </div>
+            `;
             
             // Add to page
             document.body.appendChild(notification);
             
-            // Remove after 3 seconds
+            // Auto-remove after 5 seconds
             setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 5000);
+            
+            // Add click to dismiss
+            notification.addEventListener('click', () => {
                 notification.remove();
-            }, 3000);
+            });
         }
     </script>
 </body>
